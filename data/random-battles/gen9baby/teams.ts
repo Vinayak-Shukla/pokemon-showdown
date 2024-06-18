@@ -55,8 +55,7 @@ export class RandomBabyTeams extends RandomTeams {
 
 		// Overwrite enforcementcheckers where needed here
 		this.moveEnforcementCheckers['Bug'] = (movePool, moves, abilities, types, counter) => (
-			movePool.includes('megahorn') || movePool.includes('xscissor') ||
-			(!counter.get('Bug') && (types.includes('Electric') || types.includes('Water')))
+			!counter.get('Bug')
 		);
 	}
 
@@ -139,7 +138,7 @@ export class RandomBabyTeams extends RandomTeams {
 			[SETUP, PIVOT_MOVES],
 			[SETUP, HAZARDS],
 			[PHYSICAL_SETUP, PHYSICAL_SETUP],
-			[statusMoves, ['healingwish', 'trick', 'destinybond']],
+			[statusMoves, ['destinybond', 'healingwish', 'switcheroo', 'trick']],
 			['curse', 'rapidspin'],
 
 			// These moves are redundant with each other
@@ -148,7 +147,7 @@ export class RandomBabyTeams extends RandomTeams {
 			    ['alluringvoice', 'dazlinggleam', 'drainingkiss', 'moonblast'],
 			],
 			[['bulletseed', 'gigadrain', 'leafstorm', 'seedbomb'], ['bulletseed', 'gigadrain', 'leafstorm', 'seedbomb']],
-			[['thunderwave', 'toxic', 'willowisp'], ['thunderwave', 'toxic', 'willowisp']],
+			[['hypnosis', 'thunderwave', 'toxic', 'willowisp', 'yawn'], ['hypnosis', 'thunderwave', 'toxic', 'willowisp', 'yawn']],
 			['roar', 'yawn'],
 			['dragonclaw', 'outrage'],
 			['dracometeor', 'dragonpulse'],
@@ -156,7 +155,7 @@ export class RandomBabyTeams extends RandomTeams {
 			['rockblast', 'stoneedge'],
 			['bodyslam', 'doubleedge'],
 			['gunkshot', 'poisonjab'],
-			['liquidation', 'surf'],
+			[['hydropump', 'liquidation'], 'surf'],
 		];
 
 		for (const pair of incompatiblePairs) this.incompatibleMoves(moves, movePool, pair[0], pair[1]);
@@ -441,11 +440,14 @@ export class RandomBabyTeams extends RandomTeams {
 		if (species.id === 'chinchou') return 'Volt Absorb';
 		if (species.id === 'deerling') return 'Serene Grace';
 		if (species.id === 'geodudealola') return 'Galvanize';
+		if (species.id === 'growlithehisui') return 'Rock Head';
 		if (species.id === 'gligar') return 'Immunity';
+		if (species.id === 'minccino') return 'Skill Link';
 		if (species.id === 'rellor') return 'Shed Skin';
 		if (species.id === 'riolu') return 'Inner Focus';
 		if (species.id === 'shroomish') return 'Effect Spore';
 		if (species.id === 'silicobra') return 'Shed Skin';
+		if (species.id === 'tepig') return 'Blaze';
 		if (species.id === 'timburr') return 'Guts';
 		if (species.id === 'tyrogue') return 'Guts';
 
@@ -531,12 +533,11 @@ export class RandomBabyTeams extends RandomTeams {
 			return this.sample(species.requiredItems);
 		}
 
-		if (species.id === 'minccino') return 'Loaded Dice';
 		if (species.id === 'nymble') return 'Silver Powder';
 
 		if (moves.has('focusenergy')) return 'Scope Lens';
 		if (moves.has('thief')) return '';
-		if (moves.has('trick')) return 'Choice Scarf';
+		if (moves.has('trick') || moves.has('switcheroo')) return 'Choice Scarf';
 
 		if (moves.has('acrobatics')) return ability === 'Unburden' ? 'Oran Berry' : '';
 		if (moves.has('auroraveil') || moves.has('lightscreen') && moves.has('reflect')) return 'Light Clay';
@@ -546,10 +547,7 @@ export class RandomBabyTeams extends RandomTeams {
 		if (ability === 'Quick Feet') return 'Toxic Orb';
 
 		if (this.dex.getEffectiveness('Rock', species) >= 2) return 'Heavy-Duty Boots';
-		if (
-			['Harvest', 'Ripen', 'Unburden'].includes(ability) ||
-			moves.has('belch') || moves.has('bellydrum')
-		) return 'Oran Berry';
+		if (['Harvest', 'Ripen', 'Unburden'].includes(ability) || moves.has('bellydrum')) return 'Oran Berry';
 	}
 
 	getItem(
@@ -650,27 +648,30 @@ export class RandomBabyTeams extends RandomTeams {
 		// Get level
 		const level = this.getLevel(species);
 
-		// Prepare optimal HP for Life Orb mons with HP close to the X9 threshold
-		if (item === "Life Orb") {
-			let hp = Math.floor(Math.floor(2 * species.baseStats.hp + ivs.hp + Math.floor(evs.hp / 4) + 100) * level / 100 + 10);
-			const minimumHP = Math.floor(Math.floor(2 * species.baseStats.hp + 100) * level / 100 + 10);
-			const targetHP = Math.floor(hp / 10) * 10 - 1;
 
-			// Don't subtract more than 3, that's not worth it
-			if (hp - targetHP <= 3 && minimumHP <= targetHP) {
-				// If setting evs to 0 is sufficient, decrement evs, otherwise decrement ivs with evs set to 0
-				if (Math.floor(Math.floor(2 * species.baseStats.hp + ivs.hp + 100) * level / 100 + 10) >= targetHP) {
-					evs.hp = 0;
+		// Prepare optimal HP for Belly Drum and Life Orb
+		let hp = Math.floor(Math.floor(2 * species.baseStats.hp + ivs.hp + Math.floor(evs.hp / 4) + 100) * level / 100 + 10);
+		let targetHP = Math.floor(hp / 10) * 10 - 1;
+		const minimumHP = Math.floor(Math.floor(2 * species.baseStats.hp + 100) * level / 100 + 10);
+		if (item === "Life Orb") {
+			targetHP = Math.floor(hp / 10) * 10 - 1;
+		} else if (moves.has("bellydrum")) {
+			targetHP = Math.floor(hp / 2) * 2;
+		}
+		// If the difference is too extreme, don't adjust HP
+		if (hp > targetHP && hp - targetHP <= 3 && targetHP >= minimumHP) {
+			// If setting evs to 0 is sufficient, decrement evs, otherwise decrement ivs with evs set to 0
+			if (Math.floor(Math.floor(2 * species.baseStats.hp + ivs.hp + 100) * level / 100 + 10) >= targetHP) {
+				evs.hp = 0;
+				hp = Math.floor(Math.floor(2 * species.baseStats.hp + ivs.hp + Math.floor(evs.hp / 4) + 100) * level / 100 + 10);
+				while (hp > targetHP) {
+					ivs.hp -= 1;
 					hp = Math.floor(Math.floor(2 * species.baseStats.hp + ivs.hp + Math.floor(evs.hp / 4) + 100) * level / 100 + 10);
-					while (hp > targetHP) {
-						ivs.hp -= 1;
-						hp = Math.floor(Math.floor(2 * species.baseStats.hp + ivs.hp + Math.floor(evs.hp / 4) + 100) * level / 100 + 10);
-					}
-				} else {
-					while (hp > targetHP) {
-						evs.hp -= 4;
-						hp = Math.floor(Math.floor(2 * species.baseStats.hp + ivs.hp + Math.floor(evs.hp / 4) + 100) * level / 100 + 10);
-					}
+				}
+			} else {
+				while (hp > targetHP) {
+					evs.hp -= 4;
+					hp = Math.floor(Math.floor(2 * species.baseStats.hp + ivs.hp + Math.floor(evs.hp / 4) + 100) * level / 100 + 10);
 				}
 			}
 		}
@@ -766,7 +767,7 @@ export class RandomBabyTeams extends RandomTeams {
 
 				// Limit two of any type
 				for (const typeName of types) {
-					if ((typeCount.get(typeName) || 0) >= 2 * limitFactor) {
+					if (typeCount.get(typeName) >= 2 * limitFactor) {
 						skip = true;
 						break;
 					}
@@ -777,13 +778,13 @@ export class RandomBabyTeams extends RandomTeams {
 				for (const typeName of this.dex.types.names()) {
 					// it's weak to the type
 					if (this.dex.getEffectiveness(typeName, species) > 0) {
-						if ((typeWeaknesses.get(typeName) || 0) >= 3 * limitFactor) {
+						if (typeWeaknesses.get(typeName) >= 3 * limitFactor) {
 							skip = true;
 							break;
 						}
 					}
 					if (this.dex.getEffectiveness(typeName, species) > 1) {
-						if ((typeDoubleWeaknesses.get(typeName) || 0) >= 1 * limitFactor) {
+						if (typeDoubleWeaknesses.get(typeName) >= 1 * limitFactor) {
 							skip = true;
 							break;
 						}
@@ -793,12 +794,12 @@ export class RandomBabyTeams extends RandomTeams {
 
 				// Limit four weak to Freeze-Dry
 				if (weakToFreezeDry) {
-					if ((typeWeaknesses.get('Freeze-Dry') || 0) >= 4 * limitFactor) continue;
+					if (typeWeaknesses.get('Freeze-Dry') >= 4 * limitFactor) continue;
 				}
 			}
 
 			// Limit three of any type combination in Monotype
-			if (!this.forceMonotype && isMonotype && ((typeComboCount.get(typeCombo) || 0) >= 3 * limitFactor)) continue;
+			if (!this.forceMonotype && isMonotype && typeComboCount.get(typeCombo) >= 3 * limitFactor) continue;
 
 			const set: RandomTeamsTypes.RandomSet = this.randomSet(species, teamDetails, false, false);
 			pokemon.push(set);
